@@ -20,7 +20,13 @@ const __dirname = path.dirname(__filename);
 let db;
 
 async function initialize() {
-  db = await AsyncDatabase.open("./pizza.sqlite");
+  try {
+    db = await AsyncDatabase.open("./pizza.sqlite");
+    console.log("Database connected successfully");
+  } catch (err) {
+    console.error("Failed to connect to the database:", err);
+    process.exit(1);
+  }
 
   server.register(fastifyStatic, {
     root: path.join(__dirname, "public"),
@@ -28,38 +34,42 @@ async function initialize() {
   });
 
   server.get("/api/pizzas", async function getPizzas(req, res) {
-    const pizzasPromise = db.all(
-      "SELECT pizza_type_id, name, category, ingredients as description FROM pizza_types"
-    );
-    const pizzaSizesPromise = db.all(
-      `SELECT 
-        pizza_type_id as id, size, price
-      FROM 
-        pizzas`
-    );
+    try {
+      const pizzasPromise = db.all(
+        "SELECT pizza_type_id, name, category, ingredients as description FROM pizza_types"
+      );
+      const pizzaSizesPromise = db.all(
+        `SELECT 
+          pizza_type_id as id, size, price
+        FROM 
+          pizzas`
+      );
 
-    const [pizzas, pizzaSizes] = await Promise.all([pizzasPromise, pizzaSizesPromise]);
+      const [pizzas, pizzaSizes] = await Promise.all([pizzasPromise, pizzaSizesPromise]);
 
-    const responsePizzas = pizzas.map((pizza) => {
-      const sizes = pizzaSizes.reduce((acc, current) => {
-        if (current.id === pizza.pizza_type_id) {
-          acc[current.size] = +current.price;
-        }
-        return acc;
-      }, {});
-      return {
-        id: pizza.pizza_type_id,
-        name: pizza.name,
-        category: pizza.category,
-        description: pizza.description,
-        image: `/public/pizzas/${pizza.pizza_type_id}.webp`,
-        sizes,
-      };
-    });
+      const responsePizzas = pizzas.map((pizza) => {
+        const sizes = pizzaSizes.reduce((acc, current) => {
+          if (current.id === pizza.pizza_type_id) {
+            acc[current.size] = +current.price;
+          }
+          return acc;
+        }, {});
+        return {
+          id: pizza.pizza_type_id,
+          name: pizza.name,
+          category: pizza.category,
+          description: pizza.description,
+          image: `/public/pizzas/${pizza.pizza_type_id}.webp`,
+          sizes,
+        };
+      });
 
-    res.send(responsePizzas);
+      res.send(responsePizzas);
+    } catch (err) {
+      req.log.error("Failed to fetch pizzas:", err);
+      res.status(500).send({ error: "Failed to fetch pizzas" });
+    }
   });
-
 
 server.get("/api/pizza-of-the-day", async function getPizzaOfTheDay(req, res) {
   const pizzas = await db.all(
