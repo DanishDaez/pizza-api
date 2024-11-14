@@ -17,49 +17,49 @@ const PORT = process.env.PORT || 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const db = await AsyncDatabase.open("./pizza.sqlite");
+let db;
 
-server.register(fastifyStatic, {
-  root: path.join(__dirname, "public"),
-  prefix: "/public/",
-});
+async function initialize() {
+  db = await AsyncDatabase.open("./pizza.sqlite");
 
-server.get("/api/pizzas", async function getPizzas(req, res) {
-  const pizzasPromise = db.all(
-    "SELECT pizza_type_id, name, category, ingredients as description FROM pizza_types"
-  );
-  const pizzaSizesPromise = db.all(
-    `SELECT 
-      pizza_type_id as id, size, price
-    FROM 
-      pizzas
-  `
-  );
-
-  const [pizzas, pizzaSizes] = await Promise.all([
-    pizzasPromise,
-    pizzaSizesPromise,
-  ]);
-
-  const responsePizzas = pizzas.map((pizza) => {
-    const sizes = pizzaSizes.reduce((acc, current) => {
-      if (current.id === pizza.pizza_type_id) {
-        acc[current.size] = +current.price;
-      }
-      return acc;
-    }, {});
-    return {
-      id: pizza.pizza_type_id,
-      name: pizza.name,
-      category: pizza.category,
-      description: pizza.description,
-      image: `/public/pizzas/${pizza.pizza_type_id}.webp`,
-      sizes,
-    };
+  server.register(fastifyStatic, {
+    root: path.join(__dirname, "public"),
+    prefix: "/public/",
   });
 
-  res.send(responsePizzas);
-});
+  server.get("/api/pizzas", async function getPizzas(req, res) {
+    const pizzasPromise = db.all(
+      "SELECT pizza_type_id, name, category, ingredients as description FROM pizza_types"
+    );
+    const pizzaSizesPromise = db.all(
+      `SELECT 
+        pizza_type_id as id, size, price
+      FROM 
+        pizzas`
+    );
+
+    const [pizzas, pizzaSizes] = await Promise.all([pizzasPromise, pizzaSizesPromise]);
+
+    const responsePizzas = pizzas.map((pizza) => {
+      const sizes = pizzaSizes.reduce((acc, current) => {
+        if (current.id === pizza.pizza_type_id) {
+          acc[current.size] = +current.price;
+        }
+        return acc;
+      }, {});
+      return {
+        id: pizza.pizza_type_id,
+        name: pizza.name,
+        category: pizza.category,
+        description: pizza.description,
+        image: `/public/pizzas/${pizza.pizza_type_id}.webp`,
+        sizes,
+      };
+    });
+
+    res.send(responsePizzas);
+  });
+
 
 server.get("/api/pizza-of-the-day", async function getPizzaOfTheDay(req, res) {
   const pizzas = await db.all(
@@ -309,3 +309,9 @@ const start = async () => {
 };
 
 start();
+}
+
+initialize().catch((err) => {
+console.error("Failed to initialize server:", err);
+process.exit(1);
+});
